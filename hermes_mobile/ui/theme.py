@@ -15,10 +15,31 @@ import inspect
 
 import flet as ft
 
+HERMES_TEXT_FONT = "Rules"
+HERMES_DISPLAY_FONT = "Sigurd"
+HERMES_MONO_FONT = "Courier Prime"
+
 # --- Canonical desktop tokens (src/themes/presets.ts) ---
 NOUS_BLUE = "#0053FD"
 PSYCHE_BLUE = "#1540B1"
 PSYCHE_WARM = "#FFE6CB"
+
+
+def _supported_kwargs(cls: type, values: dict) -> dict:
+    """Return kwargs supported by a Flet dataclass-style control/theme class.
+
+    Flet 0.86 exposes some constructors as (*args, **kwargs), so filtering only
+    by inspect.signature() drops every real theme token. Prefer dataclass fields
+    when present, and treat VAR_KEYWORD as support for all provided values.
+    """
+    fields = set(getattr(cls, "__dataclass_fields__", {}) or {})
+    if fields:
+        return {key: value for key, value in values.items() if key in fields}
+    params = inspect.signature(cls).parameters
+    if any(param.kind is inspect.Parameter.VAR_KEYWORD for param in params.values()):
+        return values
+    return {key: value for key, value in values.items() if key in params}
+
 
 DARK = {
     "background": "#0D2F86",
@@ -111,18 +132,16 @@ def _scheme(c: dict) -> ft.ColorScheme:
         inverse_primary=c["accent"],
         surface_tint=c["primary"],
     )
-    supported = inspect.signature(ft.ColorScheme).parameters
-    return ft.ColorScheme(**{key: value for key, value in values.items() if key in supported})
+    return ft.ColorScheme(**_supported_kwargs(ft.ColorScheme, values))
 
 
 def build_theme(dark: bool = False) -> ft.Theme:
     """Build a Flet Theme for the requested color mode."""
     c = DARK if dark else LIGHT
-    # Flet/Flutter does not parse CSS fallback stacks. Android's native system
-    # UI face (Roboto) is the platform-equivalent of Desktop's Segoe/SF stack.
-    # Passing the old comma-separated CSS literal made Flutter look for one
-    # impossible family name and silently fall back with inconsistent metrics.
-    font_family = "Roboto"
+    # The Hermes website ships Rules (UI), Sigurd (display), and Courier Prime
+    # (mono). Flet accepts one family name here; register the actual font files
+    # on page.fonts before applying this theme.
+    font_family = HERMES_TEXT_FONT
     values = dict(
         color_scheme=_scheme(c),
         use_material3=True,
@@ -167,7 +186,12 @@ def build_theme(dark: bool = False) -> ft.Theme:
             body_medium=ft.TextStyle(color=c["foreground"], size=13, height=1.45),
             body_large=ft.TextStyle(color=c["foreground"], size=14, height=1.45),
             title_medium=ft.TextStyle(color=c["foreground"], size=13, weight=ft.FontWeight.W_600),
-            title_large=ft.TextStyle(color=c["foreground"], size=18, weight=ft.FontWeight.W_700),
+            title_large=ft.TextStyle(
+                color=c["foreground"],
+                size=18,
+                weight=ft.FontWeight.W_700,
+                font_family=HERMES_DISPLAY_FONT,
+            ),
             label_medium=ft.TextStyle(color=c["muted_foreground"], size=11),
         ),
         list_tile_theme=ft.ListTileTheme(
@@ -175,10 +199,12 @@ def build_theme(dark: bool = False) -> ft.Theme:
             icon_color=c["muted_foreground"],
         ),
     )
-    supported = inspect.signature(ft.Theme).parameters
+    supported = set(getattr(ft.Theme, "__dataclass_fields__", {}) or {})
+    if not supported:
+        supported = set(inspect.signature(ft.Theme).parameters)
     if "card_bgcolor" not in supported and "card_color" in supported:
         values["card_color"] = values.pop("card_bgcolor")
-    return ft.Theme(**{key: value for key, value in values.items() if key in supported})
+    return ft.Theme(**_supported_kwargs(ft.Theme, values))
 
 
 def mode_colors(dark: bool = False) -> dict:

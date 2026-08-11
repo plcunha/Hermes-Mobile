@@ -130,11 +130,17 @@ def test_chat_has_single_shell_header_and_desktop_derived_composer():
         control.src: control
         for control in all_controls
         if isinstance(control, ft.Image)
-        and control.src in {"hermes-mascot.png", "hermes-mobile-sigil.svg"}
+        and control.src
+        in {"hermes-mascot.png", "hermes-mobile-sigil.svg", "hermes-welcome-bg.webp"}
     }
-    assert set(hero_images) == {"hermes-mascot.png", "hermes-mobile-sigil.svg"}
+    assert set(hero_images) == {
+        "hermes-mascot.png",
+        "hermes-mobile-sigil.svg",
+        "hermes-welcome-bg.webp",
+    }
     assert hero_images["hermes-mascot.png"].semantics_label == "Hermes"
-    assert hero_images["hermes-mobile-sigil.svg"].opacity == 0.72
+    assert hero_images["hermes-mobile-sigil.svg"].opacity == 0.78
+    assert hero_images["hermes-welcome-bg.webp"].opacity == 0.18
     assert view.send_button.bgcolor == "#FFE6CB"
 
 
@@ -522,3 +528,41 @@ async def test_remote_connect_attempts_are_serialized():
 
     assert results == [False, True]
     assert max_active == 1
+
+
+def test_setup_page_registers_official_hermes_fonts():
+    app = cast(Any, HermesMobileApp.__new__(HermesMobileApp))
+    app.page = FakePage()
+    app.settings = SimpleNamespace(theme="light")
+
+    app._setup_page()
+
+    assert app.page.fonts == {
+        "Rules": "fonts/RulesVariable.woff2",
+        "Sigurd": "fonts/SigurdVariable.woff2",
+        "Courier Prime": "fonts/CourierPrime-Regular.woff2",
+    }
+    assert app.page.theme.font_family == "Rules"
+    assert app.page.dark_theme.font_family == "Rules"
+    assert app.page.theme.scaffold_bgcolor == "#F8FAFF"
+    assert app.page.dark_theme.scaffold_bgcolor == "#0D2F86"
+
+
+def test_common_mono_font_uses_hermes_website_font():
+    from hermes_mobile.ui.common import MONO_FONT
+
+    assert MONO_FONT == "Courier Prime"
+
+
+def test_build_theme_preserves_flet_tokens_with_vararg_signature():
+    from hermes_mobile.ui.theme import build_theme
+
+    light = build_theme(False)
+    dark = build_theme(True)
+
+    assert light.font_family == "Rules"
+    assert light.scaffold_bgcolor == "#F8FAFF"
+    assert light.color_scheme.primary == "#0053FD"
+    assert dark.font_family == "Rules"
+    assert dark.scaffold_bgcolor == "#0D2F86"
+    assert dark.color_scheme.primary == "#FFE6CB"

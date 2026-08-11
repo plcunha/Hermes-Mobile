@@ -147,6 +147,11 @@ class HermesMobileApp:
         self.page.title = "Hermes Mobile"
         self.page.padding = 0
         self.page.spacing = 0
+        self.page.fonts = {
+            "Rules": "fonts/RulesVariable.woff2",
+            "Sigurd": "fonts/SigurdVariable.woff2",
+            "Courier Prime": "fonts/CourierPrime-Regular.woff2",
+        }
         raw_platform = getattr(self.page, "platform", "")
         platform_str = str(getattr(raw_platform, "value", raw_platform)).lower()
         page_width = float(getattr(self.page, "width", 0) or 0)

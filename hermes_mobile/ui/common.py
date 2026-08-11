@@ -12,11 +12,11 @@ from typing import Any, Iterable, List, Optional
 
 import flet as ft
 
-from hermes_mobile.ui.theme import mode_colors
+from hermes_mobile.ui.theme import HERMES_DISPLAY_FONT, HERMES_MONO_FONT, mode_colors
 
-# Flutter accepts one family name, not a CSS fallback stack. ``monospace`` is
-# the native Android alias and preserves stable metrics for metadata.
-MONO_FONT = "monospace"
+# Official Hermes website mono face. Fallback is handled by Flutter if the
+# asset cannot be loaded in a non-packaged test environment.
+MONO_FONT = HERMES_MONO_FONT
 
 
 def snack(page: ft.Page, text: str, error: bool = False):
@@ -84,17 +84,26 @@ def hermes_mascot(size: int = 144) -> ft.Control:
 
 
 def hermes_welcome_art(size: int = 136) -> ft.Control:
-    """Hermes mascot framed by the original Mobile messenger halo."""
+    """Hermes mascot framed by official and secondary Mobile identity assets."""
     width = round(size * 1.75)
     return ft.Stack(
         [
+            ft.Image(
+                src="hermes-welcome-bg.webp",
+                width=width,
+                height=size,
+                fit=ft.BoxFit.COVER,
+                filter_quality=ft.FilterQuality.HIGH,
+                opacity=0.18,
+                semantics_label="Hermes Mobile abstract orbital background",
+            ),
             ft.Image(
                 src="hermes-mobile-sigil.svg",
                 width=width,
                 height=round(size * 0.72),
                 fit=ft.BoxFit.CONTAIN,
                 filter_quality=ft.FilterQuality.HIGH,
-                opacity=0.72,
+                opacity=0.78,
                 semantics_label="Hermes Mobile messenger halo",
             ),
             hermes_mascot(round(size * 0.84)),
@@ -182,7 +191,13 @@ def page_header(
     """Canonical page heading for durable destinations and operational views."""
     c = mode_colors(dark)
     text_controls: List[ft.Control] = [
-        ft.Text(title, size=20, weight=ft.FontWeight.W_700, color=c["foreground"])
+        ft.Text(
+            title,
+            size=20,
+            weight=ft.FontWeight.W_700,
+            color=c["foreground"],
+            font_family=HERMES_DISPLAY_FONT,
+        )
     ]
     if subtitle:
         text_controls.append(ft.Text(subtitle, size=12, color=c["muted_foreground"]))
@@ -216,6 +231,7 @@ def empty_state(
             weight=ft.FontWeight.W_700,
             color=c["foreground"],
             text_align=ft.TextAlign.CENTER,
+            font_family=HERMES_DISPLAY_FONT,
         ),
         ft.Text(
             description,
