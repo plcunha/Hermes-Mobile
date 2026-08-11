@@ -13,6 +13,7 @@ import pytest
 from hermes_mobile.config.settings import HermesMobileSettings, save_settings
 from hermes_mobile.core.agent import Message
 from hermes_mobile.main import HermesMobileApp
+from hermes_mobile.remote import RemoteEvent
 from hermes_mobile.ui.chat_view import ChatView
 from hermes_mobile.ui.gateway_view import GatewayView
 from hermes_mobile.ui.tools_view import ToolsView
@@ -392,16 +393,125 @@ def test_busy_state_prevents_duplicate_turns_and_recovers():
     view = ChatView(app)
 
     view.set_busy(True)
-    assert view.input_field.disabled is True
-    # Match Desktop: the composer is locked but the send affordance stays
-    # available as an explicit interrupt button.
+    assert view.input_field.disabled is False
+    # While Hermes is working the composer stays editable so Android IME text
+    # is committed and the next non-empty send is queued instead of vanishing.
     assert view.send_button.disabled is False
     assert view.send_button.icon == ft.Icons.STOP_ROUNDED
+    assert view.send_button.tooltip == "Queue message (empty = Stop)"
 
     view.set_busy(False)
     assert view.input_field.disabled is False
     assert view.send_button.disabled is False
     assert view.send_button.icon == ft.Icons.ARROW_UPWARD
+
+
+@pytest.mark.asyncio
+async def test_busy_send_queues_non_empty_text_without_disabling_composer():
+    app = fake_app()
+    queued: list[str] = []
+
+    async def send_message(text: str):
+        queued.append(text)
+
+    app.send_message = send_message
+    view = ChatView(app)
+    view.set_busy(True)
+    view.input_field.value = "follow up"
+
+    view._on_send(None)
+    await asyncio.sleep(0)
+
+    assert queued == ["follow up"]
+    assert view.input_field.value == ""
+    assert view.input_field.disabled is False
+
+
+class FakeRemoteChat:
+    def __init__(self):
+        self.messages: list[Message] = []
+        self.bubbles: list[str] = []
+        self.statuses: list[str] = []
+        self.tool_calls = []
+        self.tool_results = []
+
+    def _add_message_bubble(self, message: Message):
+        self.bubbles.append(message.content)
+
+    def set_status(self, text: str):
+        self.statuses.append(text)
+
+    def on_tool_call(self, tool_call):
+        self.tool_calls.append(tool_call)
+
+    def on_tool_result(self, tool_call):
+        self.tool_results.append(tool_call)
+
+
+@pytest.mark.asyncio
+async def test_remote_goal_slash_uses_backend_notice_and_returned_prompt():
+    app = cast(Any, HermesMobileApp.__new__(HermesMobileApp))
+    app.page = FakePage()
+    app.settings = SimpleNamespace(runtime_mode="remote")
+    app.chat_view = FakeRemoteChat()
+    app.remote_client = SimpleNamespace(
+        state="open",
+        execute_slash_command=lambda text: asyncio.sleep(
+            0,
+            result={
+                "type": "send",
+                "notice": "⊙ Goal set (20-turn budget): ship apk",
+                "message": "ship apk",
+            },
+        ),
+    )
+    sent: list[str] = []
+
+    async def send_message(text: str, *, from_queue: bool = False):
+        sent.append(text)
+
+    app.send_message = send_message
+
+    handled = await app._handle_remote_slash_command("/goal ship apk")
+
+    assert handled is True
+    assert app.chat_view.bubbles == ["⊙ Goal set (20-turn budget): ship apk"]
+    assert sent == ["ship apk"]
+
+
+@pytest.mark.asyncio
+async def test_remote_progress_events_are_visible_in_mobile_transcript():
+    app = cast(Any, HermesMobileApp.__new__(HermesMobileApp))
+    app.page = FakePage()
+    app.remote_client = SimpleNamespace(session_id="live-1")
+    app.chat_view = FakeRemoteChat()
+    app._remote_tool_calls = {}
+
+    await app._on_remote_event(
+        RemoteEvent(
+            type="tool.start",
+            session_id="live-1",
+            payload={"tool_id": "t1", "name": "terminal", "context": "pytest"},
+        )
+    )
+    await app._on_remote_event(
+        RemoteEvent(
+            type="tool.complete",
+            session_id="live-1",
+            payload={"tool_id": "t1", "name": "terminal", "summary": "Tests passed"},
+        )
+    )
+    await app._on_remote_event(
+        RemoteEvent(
+            type="status.update",
+            session_id="live-1",
+            payload={"kind": "goal", "text": "✓ Goal achieved"},
+        )
+    )
+
+    assert app.chat_view.tool_calls[0].name == "terminal — pytest"
+    assert app.chat_view.tool_results[0].result == "Tests passed"
+    assert app.chat_view.bubbles == ["✓ Goal achieved"]
 
 
 def test_tools_surface_uses_flat_rows_not_material_cards():

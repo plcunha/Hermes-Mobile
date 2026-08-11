@@ -732,6 +732,11 @@ class HermesMobileApp:
         else:
             self._message_queue = self.composer_state_store.enqueue(self._composer_key(), text)
         snack(self.page, f"Queued ({len(self._message_queue)} pending)")
+        preview = text.replace("\n", " ")[:160]
+        if self.chat_view is not None:
+            self._append_system_chat_note(
+                f"Queued follow-up ({len(self._message_queue)} pending): {preview}"
+            )
 
     def _pop_next_queued_message(self) -> str | None:
         """Pop the next persisted queued message for FIFO draining."""
@@ -819,6 +824,51 @@ class HermesMobileApp:
         self.chat_view.messages.append(msg)
         self.chat_view._add_message_bubble(msg)
         self.page.update()
+
+    async def _handle_remote_slash_command(self, text: str) -> bool:
+        """Execute a slash command on Hermes Remote when Mobile does not own it.
+
+        Runtime commands such as ``/goal`` are implemented by the connected
+        Desktop/TUI backend.  Rendering the backend's ``notice``/``output`` in
+        the transcript gives the user durable feedback instead of a snackbar
+        that disappears, and ``type=send`` commands kick off the returned prompt
+        exactly like Desktop.
+        """
+        if not self.remote_mode:
+            return False
+        if self.remote_client is None or self.remote_client.state != "open":
+            if not await self.connect_remote(announce=True):
+                return True
+        client = self.remote_client
+        if client is None:
+            snack(self.page, "Hermes Remote is not connected", error=True)
+            return True
+
+        command = text.strip().split(None, 1)[0]
+        self.chat_view.set_status(f"Running {command} on Hermes Remote…")
+        try:
+            result = await client.execute_slash_command(text)
+        except Exception as exc:
+            logger.exception("Remote slash command failed")
+            self._append_system_chat_note(f"**Remote command error:** {exc}")
+            self.chat_view.set_status("")
+            return True
+
+        for key in ("notice", "output", "warning"):
+            value = str(result.get(key) or "").strip()
+            if value and value != "(no output)":
+                self._append_system_chat_note(value)
+
+        message = str(result.get("message") or "").strip()
+        if str(result.get("type") or "").lower() == "send" and message:
+            self.chat_view.set_status("")
+            await self.send_message(message)
+            return True
+
+        if not any(str(result.get(key) or "").strip() for key in ("notice", "output", "warning")):
+            self._append_system_chat_note("Remote command completed.")
+        self.chat_view.set_status("")
+        return True
 
     async def show_remote_sessions(self):
         """Open the full-height, source-aware Remote session browser."""
@@ -1011,8 +1061,11 @@ class HermesMobileApp:
         elif event.type == "tool.start":
             tool_id = str(payload.get("tool_id") or payload.get("id") or "remote-tool")
             arguments = payload.get("args") if isinstance(payload.get("args"), dict) else {}
+            name = str(payload.get("name") or "tool")
+            context = str(payload.get("context") or "").strip()
+            display_name = f"{name} — {context}" if context else name
             tool_call = ToolCall(
-                name=str(payload.get("name") or "tool"),
+                name=display_name,
                 arguments=arguments,
                 call_id=tool_id,
             )
@@ -1028,12 +1081,40 @@ class HermesMobileApp:
                     call_id=tool_id,
                 )
                 self.chat_view.on_tool_call(tool_call)
-            tool_call.result = payload.get("result") or payload.get("preview") or "Completed"
+            tool_call.result = (
+                payload.get("summary")
+                or payload.get("result")
+                or payload.get("preview")
+                or payload.get("inline_diff")
+                or "Completed"
+            )
             if payload.get("error"):
                 tool_call.error = str(payload["error"])
             self.chat_view.on_tool_result(tool_call)
         elif event.type == "status.update":
-            self.chat_view.set_status(str(payload.get("text") or payload.get("kind") or ""))
+            text = str(payload.get("text") or payload.get("kind") or "")
+            self.chat_view.set_status(text)
+            if text and str(payload.get("kind") or "") == "goal":
+                self._append_system_chat_note(text)
+        elif event.type == "reasoning.available":
+            text = str(payload.get("text") or "")
+            if text:
+                self.chat_view.set_status(f"Reasoning: {text[:160]}")
+        elif event.type == "tool.output_risk":
+            name = str(payload.get("name") or "tool")
+            risk = str(payload.get("risk") or "low")
+            findings = payload.get("findings") if isinstance(payload.get("findings"), list) else []
+            suffix = f" — {', '.join(str(item) for item in findings[:2])}" if findings else ""
+            self.chat_view.set_status(f"Checked {name} output risk: {risk}{suffix}")
+        elif event.type == "moa.reference":
+            label = str(payload.get("label") or "reference model")
+            text = str(payload.get("text") or "")
+            self._append_system_chat_note(
+                f"**{label}**\n\n{text}" if text else f"MoA reference: {label}"
+            )
+        elif event.type == "moa.aggregating":
+            aggregator = str(payload.get("aggregator") or "aggregator")
+            self.chat_view.set_status(f"MoA aggregator running: {aggregator}")
         elif event.type in {
             "clarify.request",
             "approval.request",
@@ -1267,6 +1348,14 @@ class HermesMobileApp:
             await self.send_message(text[1:])
 
         else:
+            if await self._handle_remote_slash_command(text):
+                return
+            if command in {"goal", "subgoal"}:
+                self._append_system_chat_note(
+                    "`/goal` is a Hermes Remote/Desktop runtime command. "
+                    "Connect the APK to Hermes Remote, then use `/goal <objective>`."
+                )
+                return
             snack(self.page, f"Unknown command: /{command}. Type /help for available commands")
 
     async def send_message(self, text: str, *, from_queue: bool = False):

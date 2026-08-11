@@ -592,6 +592,41 @@ class RemoteHermesClient:
         )
         return result if isinstance(result, dict) else {"status": result}
 
+    async def execute_slash_command(self, command: str) -> Mapping[str, Any]:
+        """Execute a Desktop/TUI slash command against the active live session.
+
+        Mobile owns a small set of local shell commands, but runtime commands
+        such as ``/goal`` live in the connected Hermes backend.  Route command
+        families through the same canonical RPCs used by Desktop/TUI so the APK
+        does not drift from backend behavior.  Like prompt submission,
+        resuming/creating the live session here prevents a selected stored
+        session from being silently bypassed.
+        """
+        clean = str(command or "").strip()
+        if not clean:
+            raise ValueError("Slash command cannot be empty")
+        if not clean.startswith("/"):
+            clean = f"/{clean}"
+        if self.session_id is None and self.stored_session_id:
+            await self.resume_session(self.stored_session_id)
+        if self.session_id is None:
+            await self.create_session()
+        command_text = clean.lstrip("/")
+        command_parts = command_text.split(maxsplit=1)
+        command_name = command_parts[0].lower() if command_parts else ""
+        command_arg = command_parts[1] if len(command_parts) > 1 else ""
+        if command_name == "goal":
+            result = await self.request(
+                "command.dispatch",
+                {"session_id": self.session_id, "name": command_name, "arg": command_arg},
+            )
+        else:
+            result = await self.request(
+                "slash.exec",
+                {"session_id": self.session_id, "command": clean},
+            )
+        return result if isinstance(result, dict) else {"output": str(result)}
+
     async def interrupt(self) -> Mapping[str, Any]:
         if not self.session_id:
             return {"interrupted": False}

@@ -363,10 +363,15 @@ class ChatView:
     def set_busy(self, busy: bool):
         """Synchronize composer affordances with the active agent turn."""
         self._sending = busy
-        self.input_field.disabled = busy
+        # Keep the composer editable while Hermes works.  Android users often
+        # type a follow-up while the remote session is running; disabling the
+        # TextField lets the IME accept text that Flet never commits, which
+        # looks like the message vanished.  The send handler already queues
+        # non-empty text and treats an empty tap as Stop, so input can stay live.
+        self.input_field.disabled = False
         self.send_button.disabled = False
         self.send_button.icon = ft.Icons.STOP_ROUNDED if busy else ft.Icons.ARROW_UPWARD
-        self.send_button.tooltip = "Stop" if busy else t("chat.send")
+        self.send_button.tooltip = "Queue message (empty = Stop)" if busy else t("chat.send")
         pet = getattr(self.app, "pet_view", None)
         if pet is not None:
             pet.set_activity("run" if busy else "idle")

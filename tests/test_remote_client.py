@@ -290,6 +290,53 @@ async def test_events_and_out_of_order_rpc_responses_are_correlated():
     await http.aclose()
 
 
+@pytest.mark.asyncio
+async def test_execute_slash_command_uses_canonical_rpc_and_creates_session():
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=status_body()))
+    http = httpx.AsyncClient(transport=transport)
+
+    def handle(frame):
+        if frame["method"] == "session.create":
+            return {
+                "jsonrpc": "2.0",
+                "id": frame["id"],
+                "result": {"session_id": "live-1", "stored_session_id": "stored-1"},
+            }
+        if frame["method"] == "command.dispatch":
+            assert frame["params"] == {
+                "session_id": "live-1",
+                "name": "goal",
+                "arg": "ship apk",
+            }
+            return {
+                "jsonrpc": "2.0",
+                "id": frame["id"],
+                "result": {
+                    "type": "send",
+                    "notice": "⊙ Goal set (20-turn budget): ship apk",
+                    "message": "ship apk",
+                },
+            }
+        raise AssertionError(f"unexpected RPC: {frame}")
+
+    ws = FakeWebSocket(handle)
+    client = RemoteHermesClient(
+        "https://remote.example",
+        token="secret",
+        http_client=http,
+        websocket_factory=SocketFactory(ws),
+    )
+    await client.connect()
+
+    result = await client.execute_slash_command("goal ship apk")
+
+    assert result["type"] == "send"
+    assert client.session_id == "live-1"
+    assert [frame["method"] for frame in ws.sent] == ["session.create", "command.dispatch"]
+    await client.close()
+    await http.aclose()
+
+
 def test_secret_store_encrypts_and_round_trips(tmp_path: Path):
     store = RemoteSecretStore(tmp_path)
     store.save(password="super-secret", token="token-value")
