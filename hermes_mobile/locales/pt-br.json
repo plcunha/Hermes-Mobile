@@ -274,7 +274,10 @@
     "remote_loading": "Carregando skills…",
     "remote_unavailable": "Skills do Remote indisponíveis",
     "remote_category": "Remote",
-    "remote_load_error": "Não foi possível carregar as skills do Remote."
+    "remote_load_error": "Não foi possível carregar as skills do Remote.",
+    "export": "Exportar",
+    "exported_to": "Exportado para",
+    "export_failed": "Não foi possível exportar a skill"
   },
   "plugins": {
     "title": "Plugins",

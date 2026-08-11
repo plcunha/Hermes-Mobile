@@ -98,6 +98,20 @@ class ChatView:
         self.pending_attachments: List[PendingAttachment] = []
         self.attachments_row = ft.Row([], spacing=6, wrap=True, visible=False)
         self.file_picker = ft.FilePicker()
+        self._register_file_picker()
+
+    def _register_file_picker(self) -> None:
+        """Register FilePicker using the active Flet line's extension point.
+
+        Flet 0.86 made FilePicker a Service. Adding it to page.overlay renders a
+        red-screen `Unknown control: FilePicker` on Android. Flet 0.28 had no
+        page.services and still requires the legacy overlay path.
+        """
+        services = getattr(self.page, "services", None)
+        if services is not None:
+            if self.file_picker not in services:
+                services.append(self.file_picker)
+            return
         if hasattr(self.page, "overlay") and self.file_picker not in self.page.overlay:
             self.page.overlay.append(self.file_picker)
 

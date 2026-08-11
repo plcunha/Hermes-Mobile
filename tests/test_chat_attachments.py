@@ -196,3 +196,27 @@ async def test_voice_button_is_honest_in_remote_mode(tmp_path: Path):
         in getattr(getattr(item, "content", None), "value", "")
         for item in app.page.overlay
     )
+
+
+class FakeServicesPage(FakePage):
+    def __init__(self):
+        super().__init__()
+        self.services = []
+
+
+def test_file_picker_registers_as_service_when_available(tmp_path: Path):
+    app = fake_app(tmp_path)
+    app.page = FakeServicesPage()
+
+    view = ChatView(app)
+
+    assert view.file_picker in app.page.services
+    assert view.file_picker not in app.page.overlay
+
+
+def test_file_picker_uses_overlay_for_legacy_flet_page(tmp_path: Path):
+    app = fake_app(tmp_path)
+
+    view = ChatView(app)
+
+    assert view.file_picker in app.page.overlay

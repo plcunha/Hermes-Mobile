@@ -1,5 +1,6 @@
 """Skills View - Skill management interface"""
 
+from pathlib import Path
 from typing import Any, Mapping
 
 import flet as ft
@@ -211,7 +212,7 @@ class SkillsView:
                         ),
                         ft.PopupMenuItem(
                             icon=ft.Icons.DOWNLOAD_OUTLINED,
-                            content="Export",
+                            content=t("skills.export"),
                             on_click=lambda e, s=skill: self._export_skill(s),
                         ),
                         ft.PopupMenuItem(
@@ -342,9 +343,23 @@ class SkillsView:
         open_dialog(self.page, dialog)
 
     def _export_skill(self, skill):
-        """Export skill to downloads"""
-        # TODO: Implement export
-        snack(self.page, "Export not yet implemented")
+        """Export a local skill to the app data export directory."""
+        data_dir = Path(self.app.settings.get_data_dir())
+        export_dir = data_dir / "exports" / "skills"
+        try:
+            ok = self.skill_manager.export_skill(skill.name, export_dir)
+        except Exception as exc:
+            snack(self.page, f"{t('skills.export_failed')}: {exc}", error=True)
+            return
+        if not ok:
+            snack(self.page, t("skills.export_failed"), error=True)
+            return
+        exported_path = (
+            export_dir / skill.name
+            if getattr(skill, "path", None) and Path(skill.path).is_dir()
+            else export_dir
+        )
+        snack(self.page, f"{t('skills.exported_to')} {exported_path}")
 
     def _confirm_remove_skill(self, skill):
         """Confirm skill removal"""

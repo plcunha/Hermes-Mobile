@@ -7,8 +7,13 @@ from hermes_mobile.ui.skills_view import SkillsView
 
 
 class Page:
+    width = 430
+    platform = "android"
+    theme_mode = None
+
     def __init__(self):
         self.updated = 0
+        self.overlay = []
 
     def update(self):
         self.updated += 1
@@ -77,3 +82,36 @@ async def test_remote_skills_offline_state_is_explicit(tmp_path):
     assert view.remote_skills == []
     assert "Connect to Hermes Remote" in view.remote_error
     assert "Remote skills unavailable" in _text_values(view.build())
+
+
+class ExportManager:
+    def __init__(self):
+        self.calls = []
+
+    def get_all_skills(self):
+        return []
+
+    def export_skill(self, name, export_path):
+        self.calls.append((name, export_path))
+        export_path.mkdir(parents=True, exist_ok=True)
+        (export_path / name).mkdir(exist_ok=True)
+        return True
+
+
+def test_export_skill_writes_to_app_export_directory(tmp_path):
+    manager = ExportManager()
+    app = make_app(tmp_path, None)
+    app.settings.runtime_mode = "local"
+    app.skill_manager = manager
+    view = SkillsView(app)
+    skill = SimpleNamespace(name="demo", path=tmp_path / "skills" / "demo")
+    skill.path.mkdir(parents=True)
+
+    view._export_skill(skill)
+
+    assert manager.calls == [("demo", tmp_path / "exports" / "skills")]
+    assert (tmp_path / "exports" / "skills" / "demo").exists()
+    assert any(
+        "Exported to" in getattr(getattr(item, "content", None), "value", "")
+        for item in app.page.overlay
+    )

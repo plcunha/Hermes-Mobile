@@ -274,7 +274,10 @@
     "remote_loading": "Loading skills…",
     "remote_unavailable": "Remote skills unavailable",
     "remote_category": "Remote",
-    "remote_load_error": "Could not load Remote skills."
+    "remote_load_error": "Could not load Remote skills.",
+    "export": "Export",
+    "exported_to": "Exported to",
+    "export_failed": "Could not export skill"
   },
   "plugins": {
     "title": "Plugins",
