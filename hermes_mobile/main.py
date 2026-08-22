@@ -632,6 +632,15 @@ class HermesMobileApp:
 
         self.current_view = view
         self.content_area.content = new_content
+        # Keep the bottom bar/rail indicator in sync with the actual surface.
+        # Without this, programmatic navigation (More menu, /sessions, session
+        # resume) changes content while the bar keeps highlighting the old
+        # destination — two items can look selected at once.
+        if self.nav is not None and view in self._views:
+            try:
+                self.nav.selected_index = self._views.index(view)
+            except Exception:
+                pass
         self._update_app_bar_title(view)
         self.page.update()
         if view == "artifacts" and self.remote_mode:

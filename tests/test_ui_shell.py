@@ -543,6 +543,50 @@ async def test_remote_slash_routes_runtime_commands_to_backend():
     assert app.agent.model == "local-model"
 
 
+def test_switch_view_syncs_bottom_nav_indicator():
+    """Programmatic navigation must move the bar indicator to the active view."""
+    app = cast(Any, HermesMobileApp.__new__(HermesMobileApp))
+    app._views = ["chat", "skills", "messaging", "artifacts"]
+    app.current_view = "chat"
+    app.content_area = SimpleNamespace(content=None)
+    app.nav = SimpleNamespace(selected_index=0)
+    app.page = FakePage()
+    app.page.theme_mode = ft.ThemeMode.DARK
+    app.chat_view = SimpleNamespace(build=lambda: ft.Container())
+    app.skills_view = SimpleNamespace(build=lambda: ft.Container())
+    app.gateway_view = SimpleNamespace(build=lambda: ft.Container())
+    app.artifacts_view = SimpleNamespace(build=lambda: ft.Container())
+    app.sessions_view = SimpleNamespace(build=lambda: ft.Container())
+    app.tools_view = SimpleNamespace(build=lambda: ft.Container())
+    app.memory_view = SimpleNamespace(build=lambda: ft.Container())
+    app.cron_view = SimpleNamespace(build=lambda: ft.Container())
+    app.plugins_view = SimpleNamespace(build=lambda: ft.Container())
+    app.terminal_view = SimpleNamespace(build=lambda: ft.Container())
+    app.kanban_view = SimpleNamespace(build=lambda: ft.Container())
+    app.settings_view = SimpleNamespace(build=lambda: ft.Container())
+    app.settings = SimpleNamespace(runtime_mode="local")
+    app.is_mobile = True
+
+    async def noop(*args, **kwargs):
+        return None
+
+    app.artifacts_view.refresh_remote = noop
+    app.settings_view.refresh_remote_models = noop
+    app.settings_view.refresh_pet_gallery = noop
+    app.settings_view.refresh_local_models = noop
+    app.skills_view.refresh_remote = noop
+    app._app_bar_title = SimpleNamespace(visible=True, value="")
+    app._app_bar_subtitle = SimpleNamespace(visible=True, value="")
+    app._app_bar_leading = SimpleNamespace(content=None)
+    app._new_session_button = SimpleNamespace(visible=True)
+    app._sessions_button = SimpleNamespace(visible=True)
+
+    app._switch_view("messaging")
+
+    assert app.nav.selected_index == 2  # messaging position in _views
+    assert app.current_view == "messaging"
+
+
 def test_tools_surface_uses_flat_rows_not_material_cards():
     app = fake_app()
     root = ToolsView(app).build()
@@ -571,6 +615,8 @@ def test_switch_view_builds_only_requested_surface():
     app.settings_view = view("settings")
     app.content_area = SimpleNamespace(content=None)
     app.page = FakePage()
+    app._views = list(HermesMobileApp.MOBILE_VIEWS)
+    app.nav = None
     app._update_app_bar_title = lambda name: None
 
     app._switch_view("tools")
