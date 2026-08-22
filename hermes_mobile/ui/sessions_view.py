@@ -570,6 +570,13 @@ class SessionsView:
                                     self._show_branch_dialog(sid, name)
                                 ),
                             ),
+                            ft.PopupMenuItem(
+                                icon=ft.Icons.ARCHIVE_OUTLINED,
+                                content=t("sessions.archive"),
+                                on_click=lambda e, sid=session_id, name=title: (
+                                    self._show_archive_dialog(sid, name)
+                                ),
+                            ),
                             *(
                                 []
                                 if selected
@@ -677,6 +684,28 @@ class SessionsView:
             button=t("sessions.delete_action"),
         )
 
+    def _show_archive_dialog(self, session_id: str, title: str) -> None:
+        async def submit() -> None:
+            if await self._archive_session(session_id, title):
+                close_dialog(self.page, dialog)
+
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(t("sessions.archive")),
+            content=ft.Text(t("sessions.archive_confirm").format(title=title)),
+            actions=[
+                ft.TextButton(
+                    t("common.cancel"),
+                    on_click=lambda e: close_dialog(self.page, dialog),
+                ),
+                ft.Button(
+                    t("sessions.archive_action"),
+                    on_click=lambda e: asyncio.create_task(submit()),
+                ),
+            ],
+        )
+        open_dialog(self.page, dialog)
+
     def _show_destructive_dialog(
         self,
         session_id: str,
@@ -752,6 +781,20 @@ class SessionsView:
         snack(self.page, t("sessions.deleted").format(title=title))
         return True
 
+    async def _archive_session(self, session_id: str, title: str = "") -> bool:
+        try:
+            client = self._remote_client()
+            archived = await client.archive_session(session_id, archived=True)
+            if not archived:
+                raise RuntimeError(t("sessions.branch_rejected"))
+        except Exception as exc:
+            logger.warning("Could not archive remote session: %s", exc)
+            snack(self.page, t("sessions.action_error").format(error=exc), error=True)
+            return False
+        self._remove_session_locally(session_id)
+        snack(self.page, t("sessions.archived").format(title=title))
+        return True
+
     async def _branch_session(self, session_id: str, title: str) -> bool:
         try:
             client = self._remote_client()
@@ -802,14 +845,35 @@ class SessionsView:
     def _toggle_pin(self, session_id: str) -> None:
         if session_id in self.pinned_ids:
             self.pinned_ids = [value for value in self.pinned_ids if value != session_id]
+            now_pinned = False
         else:
             self.pinned_ids = [session_id, *self.pinned_ids]
+            now_pinned = True
         try:
             self.pin_store.save(self.pinned_ids)
         except OSError as exc:
             logger.warning("Could not persist session pin: %s", exc)
             snack(self.page, t("sessions.pin_error"), error=True)
+        self._mirror_pin_remote(session_id, now_pinned)
         self._render(update=True)
+
+    def _mirror_pin_remote(self, session_id: str, pinned: bool) -> None:
+        """Best-effort mirror of a device-local pin to the backend keep flag.
+
+        Matches Desktop: the sidebar pin stays local, but the backend's
+        auto-archive sweep must know a pinned chat is never to be hidden.
+        """
+        client = getattr(self.app, "remote_client", None)
+        if client is None or getattr(client, "state", "") != "open":
+            return
+
+        async def _mirror() -> None:
+            try:
+                await client.pin_session_remote(session_id, pinned=pinned)
+            except Exception as exc:
+                logger.debug("Could not mirror remote pin: %s", exc)
+
+        asyncio.create_task(_mirror())
 
     @staticmethod
     def _id(item: Mapping[str, Any]) -> str:

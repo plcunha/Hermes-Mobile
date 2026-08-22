@@ -111,6 +111,11 @@ Be concise but thorough. Use tools when appropriate."""
     remote_profile: str = ""
     remote_allow_insecure: bool = False
 
+    # Home Assistant integration (smart-home tool parity). Secrets stay in
+    # .env as HA_URL / HA_TOKEN; never persisted to settings JSON.
+    ha_url: str = ""
+    ha_token: str = ""
+
     # UI settings
     theme: str = "system"  # light, dark, system
     language: str = "en"

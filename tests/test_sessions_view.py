@@ -321,7 +321,7 @@ def test_session_menu_contains_all_lifecycle_actions(tmp_path):
 
     assert "Rename session" in items or "Renomear sessão" in items
     assert "Branch session" in items or "Criar ramificação" in items
-    assert "Archive session" not in items and "Arquivar sessão" not in items
+    assert "Archive session" in items or "Arquivar sessão" in items
     assert "Delete session" in items or "Excluir sessão" in items
 
 
@@ -343,7 +343,7 @@ def test_active_session_menu_hides_delete(tmp_path):
     assert "Continue session" in menu_items or "Continuar sessão" in menu_items
     assert "Rename session" in menu_items or "Renomear sessão" in menu_items
     assert "Branch session" in menu_items or "Criar ramificação" in menu_items
-    assert "Archive session" not in menu_items and "Arquivar sessão" not in menu_items
+    assert "Archive session" in menu_items or "Arquivar sessão" in menu_items
     assert "Delete session" not in menu_items and "Excluir sessão" not in menu_items
 
 
@@ -373,6 +373,52 @@ def test_remove_session_locally_also_removes_pin(tmp_path):
 
     assert [view._id(item) for item in view.sessions] == ["keep"]
     assert view.pinned_ids == ["keep"]
+
+
+@pytest.mark.asyncio
+async def test_archive_session_removes_from_list_and_shows_success(tmp_path):
+    app = make_app(tmp_path)
+
+    class Client:
+        state = "open"
+
+        async def archive_session(self, sid, archived=True):
+            assert archived is True
+            return True
+
+    app.remote_client = Client()
+    view = SessionsView(app)
+    view.sessions = [
+        {"id": "s1", "title": "Archive me", "source": "desktop"},
+        {"id": "s2", "title": "Keep", "source": "desktop"},
+    ]
+    view.build()
+
+    ok = await view._archive_session("s1", "Archive me")
+
+    assert ok is True
+    assert [view._id(item) for item in view.sessions] == ["s2"]
+
+
+@pytest.mark.asyncio
+async def test_archive_session_failure_keeps_list(tmp_path):
+    app = make_app(tmp_path)
+
+    class Client:
+        state = "open"
+
+        async def archive_session(self, sid, archived=True):
+            return False
+
+    app.remote_client = Client()
+    view = SessionsView(app)
+    view.sessions = [{"id": "s1", "title": "Archive me", "source": "desktop"}]
+    view.build()
+
+    ok = await view._archive_session("s1", "Archive me")
+
+    assert ok is False
+    assert [view._id(item) for item in view.sessions] == ["s1"]
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,7 @@ Both degrade gracefully when the active provider has no key.
 from __future__ import annotations
 
 import base64
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -21,6 +22,10 @@ from hermes_mobile.config.settings import get_settings
 # vision-capable or is ambiguous. Kept cheap: gpt-4o-mini handles images.
 VISION_MODEL = "openai/gpt-4o-mini"
 IMAGE_MODEL = "openai/gpt-image-1"
+# Cheap, widely available OpenAI-compatible speech model. "alloy" is a stable
+# voice shared by tts-1 and gpt-4o-mini-tts.
+TTS_MODEL = "openai/gpt-4o-mini-tts"
+TTS_VOICE = "alloy"
 
 
 def _is_url(value: str) -> bool:
@@ -123,5 +128,62 @@ async def image_generate_tool(
             return {"error": "Unexpected response shape"}
     except httpx.TimeoutException:
         return {"error": "Image generation timed out"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+async def text_to_speech_tool(
+    text: str,
+    agent: Optional[Any] = None,
+    voice: str = TTS_VOICE,
+) -> Dict[str, Any]:
+    """Generate speech audio via the provider's OpenAI-compatible /audio/speech endpoint.
+
+    Saves the MP3 into the app data directory so it is playable/shareable from
+    the device. Degrades gracefully when no provider key is configured.
+    """
+    settings = get_settings()
+    api_key = (
+        settings.openrouter_api_key
+        or settings.openai_api_key
+        or settings.anthropic_api_key
+        or settings.gemini_api_key
+    )
+    if not api_key:
+        return {"error": "No API key configured for text-to-speech."}
+    if not text or not text.strip():
+        return {"error": "text is required"}
+
+    base_url = agent._get_base_url() if agent is not None else "https://openrouter.ai/api/v1"
+    url = base_url.rstrip("/") + "/audio/speech"
+    payload = {
+        "model": TTS_MODEL,
+        "input": text,
+        "voice": str(voice or TTS_VOICE),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp = await client.post(
+                url,
+                headers={"Authorization": f"Bearer {api_key}"},
+                json=payload,
+            )
+            if resp.status_code != 200:
+                return {"error": f"HTTP {resp.status_code}: {resp.text[:300]}"}
+            audio = resp.content
+            if not audio:
+                return {"error": "No audio returned"}
+            out_dir = Path(settings.get_data_dir()) / "audio"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_path = out_dir / f"speech_{int(time.time())}.mp3"
+            out_path.write_bytes(audio)
+            return {
+                "path": str(out_path),
+                "bytes": len(audio),
+                "note": "Speech saved. Play or share the file to hear it.",
+            }
+    except httpx.TimeoutException:
+        return {"error": "Text-to-speech timed out"}
     except Exception as e:
         return {"error": str(e)}

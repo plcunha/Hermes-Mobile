@@ -34,6 +34,12 @@ from hermes_mobile.tools.desktop_tools import (
     skills_list_tool,
     todo_tool,
 )
+from hermes_mobile.tools.home_assistant import (
+    ha_call_service_tool,
+    ha_get_state_tool,
+    ha_list_entities_tool,
+    ha_list_services_tool,
+)
 from hermes_mobile.tools.kanban_tools import (
     kanban_block_tool,
     kanban_comment_tool,
@@ -46,6 +52,7 @@ from hermes_mobile.tools.kanban_tools import (
 )
 from hermes_mobile.tools.media_tools import (
     image_generate_tool,
+    text_to_speech_tool,
     vision_analyze_tool,
 )
 from hermes_mobile.tools.path_security import validate_and_resolve_path
@@ -575,6 +582,11 @@ class MobileAgent:
             "browser_get_images": self._tool_browser_get_images,
             "vision_analyze": self._tool_vision_analyze,
             "image_generate": self._tool_image_generate,
+            "text_to_speech": self._tool_text_to_speech,
+            "ha_list_entities": self._tool_ha_list_entities,
+            "ha_get_state": self._tool_ha_get_state,
+            "ha_list_services": self._tool_ha_list_services,
+            "ha_call_service": self._tool_ha_call_service,
             "project_list": self._tool_project_list,
             "project_create": self._tool_project_create,
             "project_switch": self._tool_project_switch,
@@ -815,6 +827,37 @@ class MobileAgent:
     async def _tool_image_generate(self, prompt: str) -> Dict[str, Any]:
         """Generate an image from a prompt."""
         return await image_generate_tool(prompt=prompt, agent=self)
+
+    async def _tool_text_to_speech(self, text: str, voice: str = "alloy") -> Dict[str, Any]:
+        """Generate speech audio from text."""
+        return await text_to_speech_tool(text=text, agent=self, voice=voice)
+
+    async def _tool_ha_list_entities(self) -> Dict[str, Any]:
+        """List Home Assistant entities."""
+        return await ha_list_entities_tool()
+
+    async def _tool_ha_get_state(self, entity_id: str) -> Dict[str, Any]:
+        """Read a Home Assistant entity state."""
+        return await ha_get_state_tool(entity_id=entity_id)
+
+    async def _tool_ha_list_services(self) -> Dict[str, Any]:
+        """List Home Assistant services."""
+        return await ha_list_services_tool()
+
+    async def _tool_ha_call_service(
+        self,
+        domain: str,
+        service: str,
+        service_data: Optional[Dict[str, Any]] = None,
+        entity_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Call a Home Assistant service."""
+        return await ha_call_service_tool(
+            domain=domain,
+            service=service,
+            service_data=service_data,
+            entity_id=entity_id,
+        )
 
     async def _tool_project_list(self) -> Dict[str, Any]:
         """List projects and the active one."""
@@ -1405,6 +1448,84 @@ class MobileAgent:
                                 "prompt": {"type": "string", "description": "Image prompt"},
                             },
                             "required": ["prompt"],
+                        },
+                    },
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "text_to_speech",
+                        "description": "Generate speech audio from text (saved to the device)",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string", "description": "Text to speak"},
+                                "voice": {
+                                    "type": "string",
+                                    "description": "Voice name",
+                                    "default": "alloy",
+                                },
+                            },
+                            "required": ["text"],
+                        },
+                    },
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "ha_list_entities",
+                        "description": "List all Home Assistant entity ids",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "ha_get_state",
+                        "description": "Read one Home Assistant entity's state and attributes",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "entity_id": {"type": "string", "description": "Entity id"},
+                            },
+                            "required": ["entity_id"],
+                        },
+                    },
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "ha_list_services",
+                        "description": "List callable Home Assistant services as domain.service",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                },
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "ha_call_service",
+                        "description": "Call a Home Assistant service (e.g. light.turn_on)",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "domain": {
+                                    "type": "string",
+                                    "description": "Service domain (e.g. light)",
+                                },
+                                "service": {
+                                    "type": "string",
+                                    "description": "Service name (e.g. turn_on)",
+                                },
+                                "service_data": {
+                                    "type": "object",
+                                    "description": "Optional service payload",
+                                },
+                                "entity_id": {
+                                    "type": "string",
+                                    "description": "Optional target entity id",
+                                },
+                            },
+                            "required": ["domain", "service"],
                         },
                     },
                 },

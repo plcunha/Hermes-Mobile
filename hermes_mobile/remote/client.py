@@ -564,6 +564,29 @@ class RemoteHermesClient:
         payload = await self._session_rest_request("DELETE", stored_session_id)
         return bool(payload.get("deleted"))
 
+    async def archive_session(self, stored_session_id: str, archived: bool = True) -> bool:
+        """Archive (hide) or unarchive a session via the Desktop REST API."""
+        payload = await self._session_rest_request(
+            "PATCH",
+            stored_session_id,
+            body={"archived": bool(archived)},
+        )
+        return bool(payload.get("ok"))
+
+    async def pin_session_remote(self, stored_session_id: str, pinned: bool = True) -> bool:
+        """Mirror a device-local pin to the backend "keep" flag.
+
+        Desktop keeps the sidebar pin device-local but mirrors it to the backend
+        so the sessions.auto_archive sweep never hides a pinned chat. Best-effort
+        from Mobile: callers should swallow failures.
+        """
+        payload = await self._session_rest_request(
+            "PATCH",
+            stored_session_id,
+            body={"pinned": bool(pinned)},
+        )
+        return bool(payload.get("ok"))
+
     async def fork_session(self, stored_session_id: str, *, title: str = "") -> Mapping[str, Any]:
         body = {"title": str(title).strip()} if str(title).strip() else {}
         payload = await self._session_rest_request(

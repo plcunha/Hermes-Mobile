@@ -549,3 +549,30 @@ async def test_remote_capability_helpers_use_canonical_rpc_shapes():
     ]
     await client.close()
     await http.aclose()
+
+
+@pytest.mark.asyncio
+async def test_archive_and_pin_session_use_desktop_patch_contract():
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        body = json.loads(request.content) if request.content else {}
+        return httpx.Response(200, json={"ok": True, "body": body})
+
+    transport = httpx.MockTransport(handler)
+    http = httpx.AsyncClient(transport=transport)
+    client = RemoteHermesClient("https://remote.example", token="secret", http_client=http)
+
+    archived = await client.archive_session("s1", archived=True)
+    pinned = await client.pin_session_remote("s1", pinned=True)
+
+    assert archived is True
+    assert pinned is True
+    assert len(seen) == 2
+    assert seen[0].method == "PATCH"
+    assert seen[0].url.path.endswith("/api/sessions/s1")
+    assert json.loads(seen[0].content) == {"archived": True}
+    assert seen[1].method == "PATCH"
+    assert json.loads(seen[1].content) == {"pinned": True}
+    await http.aclose()
