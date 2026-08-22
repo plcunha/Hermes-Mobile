@@ -514,6 +514,35 @@ async def test_remote_progress_events_are_visible_in_mobile_transcript():
     assert app.chat_view.bubbles == ["✓ Goal achieved"]
 
 
+@pytest.mark.asyncio
+async def test_remote_slash_routes_runtime_commands_to_backend():
+    app = cast(Any, HermesMobileApp.__new__(HermesMobileApp))
+    app.page = FakePage()
+    app.settings = SimpleNamespace(
+        runtime_mode="remote",
+        default_model="local-model",
+        default_provider="local-provider",
+    )
+    app.agent = SimpleNamespace(model="local-model")
+    routed: list[str] = []
+
+    async def fake_remote(cmd: str) -> bool:
+        routed.append(cmd)
+        return True
+
+    app._handle_remote_slash_command = fake_remote
+
+    await app._handle_slash_command("/model deepseek/foo")
+    await app._handle_slash_command("/provider z-ai")
+    await app._handle_slash_command("/compress")
+
+    assert routed == ["/model deepseek/foo", "/provider z-ai", "/compress"]
+    # Remote mode must not silently mutate local-only state that the backend owns.
+    assert app.settings.default_model == "local-model"
+    assert app.settings.default_provider == "local-provider"
+    assert app.agent.model == "local-model"
+
+
 def test_tools_surface_uses_flat_rows_not_material_cards():
     app = fake_app()
     root = ToolsView(app).build()

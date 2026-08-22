@@ -657,6 +657,13 @@ class TestEnsureDefaultJobs:
         second = len(list_jobs())
         assert first == second
 
+    def test_default_jobs_are_real_actions_not_stubs(self):
+        # A default job must actually do something. The former
+        # "sync_conversations" stub (which only printed a count) is gone.
+        names = {job_def["name"] for job_def in DEFAULT_JOBS}
+        assert names == {"cleanup_expired_memory", "check_updates", "backup_data"}
+        assert len(DEFAULT_JOBS) == 3
+
 
 class TestJobsLock:
     def test_jobs_lock_acquire(self, temp_dir):

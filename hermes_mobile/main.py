@@ -1184,23 +1184,28 @@ class HermesMobileApp:
         command = parts[0].lstrip("/").lower()
         arg = parts[1] if len(parts) > 1 else ""
 
+        # Runtime-owned commands are executed by the connected Hermes backend in
+        # Remote mode. Mobile must not silently mutate local-only state (settings
+        # or a stub attribute) that has no effect on the remote session.
+        if self.remote_mode and command in {"model", "provider", "compress"}:
+            await self._handle_remote_slash_command(text)
+            return
+
         # Session management
         if command in ("new", "reset"):
             self._start_new_session()
         elif command in ("stop", "interrupt", "cancel"):
             await self.interrupt_turn()
 
-        # Model / provider
+        # Model / provider (local mode — Remote mode returned above)
         elif command == "model":
             if arg:
                 self.settings.default_model = arg
-                if self.remote_mode and self.remote_client:
-                    self.remote_client.model = arg
-                elif self.agent:
+                if self.agent:
                     self.agent.model = arg
                     if hasattr(self.agent, "_init_client"):
                         self.agent._init_client()
-                elif not self.remote_mode:
+                else:
                     snack(self.page, f"Model set to {arg} (takes effect on next session)")
                 snack(self.page, f"Model: {arg}")
                 short = arg.split("/")[-1] if "/" in arg else arg
@@ -1208,8 +1213,7 @@ class HermesMobileApp:
                     self._app_bar_subtitle.value = short
                 self.page.update()
             else:
-                model = self.remote_model if self.remote_mode else self.settings.default_model
-                snack(self.page, f"Current model: {model}")
+                snack(self.page, f"Current model: {self.settings.default_model}")
         elif command == "provider":
             if arg:
                 self.settings.default_provider = arg
@@ -1245,21 +1249,28 @@ class HermesMobileApp:
                 "**Available commands**",
                 "",
                 "`/new`, `/reset` — new session",
-                "`/stop` — interrupt agent",
+                "`/stop`, `/interrupt` — stop the running turn",
                 "`/model [name]` — show/set model",
                 "`/provider [name]` — show/set provider",
                 "`/undo` — remove last exchange",
                 "`/retry` — resend last message",
                 "`/status` — agent & session info",
                 "`/usage` — token usage estimate",
-                "`/queue`, `/queue clear` — inspect or clear pending messages",
+                "`/queue`, `/queue clear` — inspect or clear queued messages",
+                "`/goal <objective>` — set a standing goal (Hermes Remote)",
+                "`/subgoal <criterion>` — add a criterion to the active goal (Remote)",
+                "`/compress` — compress context",
                 "`/version` — app version",
                 "`/tools` — tool count",
                 "`/skills` — skill count",
                 "`/sessions` — open session browser",
                 "`/settings` — open settings",
-                "`/compress` — compress context",
+                "`/memory` — open memory",
+                "`/cron` — open cron jobs",
+                "`/gateway` — open gateway",
                 "`/help` — this list",
+                "",
+                "In Remote mode, `/model`, `/provider`, `/compress` and `/goal` run on the connected Hermes backend.",
             ]
             from hermes_mobile.ui.chat_view import Message
 
@@ -1268,14 +1279,20 @@ class HermesMobileApp:
             self.chat_view._add_message_bubble(msg)
             self.page.update()
         elif command == "status":
-            model = self.remote_model if self.remote_mode else self.settings.default_model
-            provider = self.settings.default_provider
             mode = "Remote" if self.remote_mode else "Local"
             title = self.current_session_title
             msgs = len(self.chat_view.messages) if self.chat_view else 0
-            info = f"Mode: {mode}\nModel: {provider}/{model}\nSession: {title}\nMessages: {msgs}"
-            if self.remote_mode and self.remote_client:
-                info += f"\nGateway: {self.remote_client.state}"
+            if self.remote_mode:
+                model = self.remote_model or "backend-selected"
+                info = f"Mode: {mode}\nModel: {model}\nSession: {title}\nMessages: {msgs}"
+                if self.remote_client:
+                    info += f"\nGateway: {self.remote_client.state}"
+            else:
+                provider = self.settings.default_provider
+                model = self.settings.default_model
+                info = (
+                    f"Mode: {mode}\nModel: {provider}/{model}\nSession: {title}\nMessages: {msgs}"
+                )
             snack(self.page, info)
         elif command == "usage":
             if self.remote_mode and self.remote_client:

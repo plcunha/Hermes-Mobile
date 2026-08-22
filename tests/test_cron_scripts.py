@@ -33,56 +33,6 @@ class TestCleanupMemory:
         mock_provider.close.assert_called_once()
 
 
-class TestSyncConversations:
-    """Tests for sync_conversations.py"""
-
-    @patch("hermes_mobile.cron.sync_conversations.get_settings")
-    @patch("hermes_mobile.cron.sync_conversations.MobileMemoryProvider")
-    def test_main(self, MockProvider, mock_get_settings, temp_dir):
-        mock_settings = MagicMock()
-        mock_settings.get_memory_db_path.return_value = str(temp_dir / "memory.db")
-        mock_settings.encrypt_memory = False
-        mock_get_settings.return_value = mock_settings
-
-        mock_provider = MagicMock()
-        mock_provider.list_conversations = AsyncMock(return_value=["conv1", "conv2"])
-        MockProvider.return_value = mock_provider
-
-        import asyncio
-
-        from hermes_mobile.cron.sync_conversations import main
-
-        asyncio.run(main())
-
-        MockProvider.assert_called_once_with(
-            db_path=str(temp_dir / "memory.db"),
-            encrypt=False,
-        )
-        mock_provider.list_conversations.assert_awaited_once_with(limit=100)
-        mock_provider.close.assert_called_once()
-
-    @patch("hermes_mobile.cron.sync_conversations.get_settings")
-    @patch("hermes_mobile.cron.sync_conversations.MobileMemoryProvider")
-    def test_main_empty(self, MockProvider, mock_get_settings, temp_dir):
-        mock_settings = MagicMock()
-        mock_settings.get_memory_db_path.return_value = str(temp_dir / "memory.db")
-        mock_settings.encrypt_memory = False
-        mock_get_settings.return_value = mock_settings
-
-        mock_provider = MagicMock()
-        mock_provider.list_conversations = AsyncMock(return_value=[])
-        MockProvider.return_value = mock_provider
-
-        import asyncio
-
-        from hermes_mobile.cron.sync_conversations import main
-
-        asyncio.run(main())
-
-        mock_provider.list_conversations.assert_awaited_once_with(limit=100)
-        mock_provider.close.assert_called_once()
-
-
 class TestCheckUpdates:
     """Tests for check_updates.py"""
 

@@ -156,6 +156,14 @@ class TestT:
         init("pt-br")
         assert t("common.save") == "Salvar"
 
+    def test_gateway_connection_labels_resolve_in_both_locales(self):
+        init("en")
+        assert t("gateway.offline") == "Offline"
+        assert t("gateway.online") == "Online"
+        init("pt-br")
+        assert t("gateway.offline") == "Offline"
+        assert t("gateway.online") == "Online"
+
 
 class TestTranslateDict:
     def teardown_method(self):

@@ -215,7 +215,9 @@
     "pair_instructions": "Envie este codigo para o bot parear seu dispositivo",
     "no_code": "Nenhum codigo de pareamento ativo",
     "approved": "Usuario aprovado",
-    "revoked": "Pareamento revogado"
+    "revoked": "Pareamento revogado",
+    "offline": "Offline",
+    "online": "Online"
   },
   "memory": {
     "title": "Memoria",

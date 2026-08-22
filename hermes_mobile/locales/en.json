@@ -215,7 +215,9 @@
     "pair_instructions": "Send this code to the bot to pair your device",
     "no_code": "No active pairing codes",
     "approved": "User approved",
-    "revoked": "Pairing revoked"
+    "revoked": "Pairing revoked",
+    "offline": "Offline",
+    "online": "Online"
   },
   "memory": {
     "title": "Memory",
